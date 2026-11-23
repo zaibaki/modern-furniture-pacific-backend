@@ -12,6 +12,7 @@ here. Prices are in Kenyan shillings (KES).
 | Path | What it is |
 |---|---|
 | `supabase/migrations/20261123140000_init.sql` | Schema + RLS policies + grants |
+| `supabase/migrations/20261123142900_product_position.sql` | `products.position` — display order (see below) |
 | `supabase/seed.sql` | All data, generated from the site's `products.json` |
 | `scripts/generate_seed.py` | The generator — re-run it to re-seed after the site data changes |
 | `supabase/config.toml` | Local Supabase project config (from `supabase init`) |
@@ -25,7 +26,9 @@ here. Prices are in Kenyan shillings (KES).
   `collections` (text array of Shopify collection handles), `is_new`,
   `is_best_seller`, `vendor` (kept exactly as listed, including the
   `Mordern Furniture Pacific` spelling on 6 products), `description`,
-  `price_min` / `price_max` (numeric, KES), `in_stock`, `original_url`.
+  `price_min` / `price_max` (numeric, KES), `in_stock`, `original_url`,
+  `position` (display order — the order in the site's `products.json`,
+  which the shop page lists products in; set by the seed generator).
 - **`product_variants`** — size/option rows: `option`, `price` (KES),
   `available`, `position`.
 - **`product_images`** — image paths in display order: `path`
@@ -73,6 +76,48 @@ psql "$DATABASE_URL" -f supabase/seed.sql
 > dashboard first. The schema and seed in this repo are verified
 > against PostgreSQL 16 locally (35 products, 98 variants, 183 images,
 > anon-read + anon-write-denied checks pass).
+
+## Connecting the frontend
+
+The site ([zaibaki/modern-furniture-pacific](https://github.com/zaibaki/modern-furniture-pacific))
+is already wired to talk to this backend — `src/lib/data.ts` fetches the
+catalogue from Supabase when both env vars below are set, and falls back
+to the baked-in `src/data/products.json` when they are not (or when the
+fetch fails). The switch is automatic; no code change is needed. The
+premium images are unaffected — they are local files either way.
+
+Finish the live connection:
+
+```bash
+# 1. On the Mac, log the Supabase CLI in (one time):
+supabase login
+
+# 2. Create the project (dashboard, or CLI):
+supabase projects create modern-furniture-pacific \
+  --region eu-central-1 --db-password '<strong-random-password>'
+#    Save the DB password in .env (gitignored) — see .env.example.
+#    eu-central-1 (Frankfurt) matches the existing mc-beauty project.
+
+# 3. Link this repo, push the schema, load the data:
+supabase link --project-ref <project-ref>
+supabase db push
+supabase db reset          # applies migrations + runs supabase/seed.sql
+
+# 4. In the Vercel dashboard, project modern-furniture-pacific-two →
+#    Settings → Environment Variables, add:
+#      NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+#      NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-public-key>
+#    (from the Supabase project dashboard → Settings → API)
+
+# 5. Redeploy the site (Vercel → Deployments → Redeploy, or push any
+#    commit). The site switches to Supabase automatically on the next
+#    build. Verify: the shop still lists all 35 products.
+```
+
+The anon key is publishable by design — RLS only allows public reads —
+but it still goes in Vercel env vars / a local `.env`, never in git.
+Until step 4 is done, the live site keeps reading its local JSON and
+nothing changes for visitors.
 
 ## Re-generating the seed
 

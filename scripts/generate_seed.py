@@ -151,6 +151,10 @@ def main():
     lines.append("")
 
     # ---- products, variants, images ---------------------------------------
+    # Display order is the JSON order (the order the shop page lists
+    # products in). Rows below are written alphabetically for a stable
+    # diff; `position` carries the display order.
+    position_by_handle = {p["handle"]: i for i, p in enumerate(products)}
     n_variants = 0
     n_images = 0
     for p in sorted(products, key=lambda x: x["handle"]):
@@ -164,7 +168,7 @@ def main():
             "insert into public.products (id, shopify_id, handle, title, "
             "original_title, type, category_id, collections, is_new, "
             "is_best_seller, vendor, description, price_min, price_max, "
-            "in_stock, original_url) values "
+            "in_stock, original_url, position) values "
             f"({sql_str(pid)}, {sql_str(p['id'])}, {sql_str(handle)}, "
             f"{sql_str(p['title'])}, {sql_str(p.get('originalTitle'))}, "
             f"{sql_str(p.get('type'))}, {sql_str(cat_id)}, "
@@ -173,7 +177,8 @@ def main():
             f"{sql_str(bool(p.get('isBestSeller')))}, "
             f"{sql_str(p.get('vendor'))}, {sql_str(desc)}, "
             f"{sql_str(p['priceMin'])}, {sql_str(p['priceMax'])}, "
-            f"{sql_str(bool(p.get('inStock')))}, {sql_str(p.get('url'))}) "
+            f"{sql_str(bool(p.get('inStock')))}, {sql_str(p.get('url'))}, "
+            f"{position_by_handle[handle]}) "
             "on conflict (handle) do update set "
             "shopify_id = excluded.shopify_id, title = excluded.title, "
             "original_title = excluded.original_title, "
@@ -186,6 +191,7 @@ def main():
             "price_max = excluded.price_max, "
             "in_stock = excluded.in_stock, "
             "original_url = excluded.original_url, "
+            "position = excluded.position, "
             "updated_at = now();"
         )
 
